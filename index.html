@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AR Cuaderno</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+    #loading {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: #000; color: #fff; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; z-index: 999;
+      font-family: sans-serif; gap: 16px;
+    }
+    #loading p { font-size: 14px; color: #aaa; text-align: center; padding: 0 20px; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid #333;
+      border-top-color: #f90;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #scan-hint {
+      position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.6); color: #fff; padding: 10px 20px;
+      border-radius: 20px; font-family: sans-serif; font-size: 13px;
+      z-index: 10; text-align: center; display: none;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+</head>
+<body>
+  <div id="loading">
+    <div class="spinner"></div>
+    <p>Iniciando cámara AR...</p>
+    <p>Apunta al cuaderno cuando esté listo</p>
+  </div>
+  <div id="scan-hint">Apunta la cámara a la imagen del cuaderno</div>
+
+  <a-scene
+    mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiLoading: no; uiScanning: no;"
+    color-space="sRGB"
+    renderer="colorManagement: true"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+
+    <a-assets>
+      <video id="arVideo" src="./video.mp4"
+        preload="auto" loop="true" muted playsinline webkit-playsinline
+        crossorigin="anonymous">
+      </video>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity mindar-image-target="targetIndex: 0">
+      <!-- Video plano flotando sobre la imagen, proporción 16:9 -->
+      <a-video
+        src="#arVideo"
+        position="0 0 0.01"
+        width="1" height="0.5625"
+        rotation="0 0 0">
+      </a-video>
+    </a-entity>
+
+  </a-scene>
+
+  <script>
+    const scene = document.querySelector('a-scene');
+    const loading = document.getElementById('loading');
+    const hint = document.getElementById('scan-hint');
+    const video = document.getElementById('arVideo');
+
+    scene.addEventListener('loaded', () => {
+      loading.style.display = 'none';
+      hint.style.display = 'block';
+    });
+
+    const target = document.querySelector('[mindar-image-target]');
+
+    target.addEventListener('targetFound', () => {
+      hint.style.display = 'none';
+      video.play();
+    });
+
+    target.addEventListener('targetLost', () => {
+      hint.style.display = 'block';
+      video.pause();
+    });
+  </script>
+</body>
+</html>
