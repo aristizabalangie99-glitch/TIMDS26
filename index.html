@@ -5,13 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AR Cuaderno</title>
 
-  <!-- ✅ Librerías correctas desde CDN -->
+  <!-- Librerías -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-three.prod.js"></script>
 
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; font-family: sans-serif; }
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
 
     #start-screen {
       position: absolute;
@@ -26,20 +25,19 @@
       z-index: 10;
       gap: 20px;
       text-align: center;
-      padding: 20px;
     }
 
     #start-btn {
       padding: 15px 35px;
-      background: #f90;
+      background: orange;
       border: none;
       border-radius: 30px;
       font-weight: bold;
-      font-size: 16px;
       cursor: pointer;
     }
 
     #ar-container {
+      position: relative; /* 🔥 IMPORTANTE */
       width: 100vw;
       height: 100vh;
     }
@@ -53,7 +51,6 @@
       color: #fff;
       padding: 10px 20px;
       border-radius: 20px;
-      font-size: 14px;
     }
   </style>
 </head>
@@ -63,7 +60,7 @@
 <div id="start-screen">
   <h2>AR Cuaderno</h2>
   <p>Toca iniciar y apunta a la imagen</p>
-  <button id="start-btn" onclick="startAR()">INICIAR</button>
+  <button onclick="startAR()">INICIAR</button>
 </div>
 
 <div id="ar-container"></div>
@@ -111,6 +108,12 @@ async function startAR() {
   };
 
   await mindarThree.start();
+
+  // 🔥 FIX CÁMARA (LO QUE TE FALTABA)
+  const camVideo = mindarThree.video;
+  camVideo.setAttribute("playsinline", "");
+  camVideo.muted = true;
+  camVideo.play();
 
   renderer.setAnimationLoop(() => {
     renderer.render(scene, camera);
