@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>AR Cuaderno</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    /* ── Pantalla de inicio ── */
+    #start-screen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #111;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      gap: 24px;
+      padding: 40px;
+      text-align: center;
+    }
+    #start-screen h2 { font-size: 22px; font-weight: 700; }
+    #start-screen p  { font-size: 14px; color: #aaa; line-height: 1.7; }
+    #start-btn {
+      background: #f90;
+      color: #000;
+      border: none;
+      padding: 18px 48px;
+      border-radius: 40px;
+      font-size: 18px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    /* ── Contenedor AR ── */
+    #ar-container {
+      display: none;
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* MindAR inyecta su propio canvas y video aquí */
+    #ar-container canvas,
+    #ar-container video {
+      position: absolute !important;
+      top: 0 !important; left: 0 !important;
+      width: 100% !important; height: 100% !important;
+      object-fit: cover;
+    }
+
+    /* ── Indicador inferior ── */
+    #hint {
+      position: absolute;
+      bottom: 50px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      padding: 12px 28px;
+      border-radius: 30px;
+      font-size: 14px;
+      border: 1px solid rgba(255,165,0,0.5);
+      white-space: nowrap;
+      z-index: 100;
+      pointer-events: none;
+      transition: opacity 0.4s;
+    }
+    #hint.hidden { opacity: 0; }
+
+    /* ── Pantalla de error ── */
+    #error-msg {
+      display: none;
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #111;
+      color: #fff;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 30px;
+      font-size: 15px;
+      line-height: 1.8;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── INICIO ── -->
+<div id="start-screen">
+  <h2>AR Cuaderno</h2>
+  <p>Toca el botón, acepta el permiso<br>de cámara y apunta a la<br>portada del cuaderno</p>
+  <button id="start-btn" onclick="startAR()">ACTIVAR CÁMARA</button>
+</div>
+
+<!-- ── AR ── -->
+<div id="ar-container">
+  <div id="hint">Apunta a la imagen del cuaderno</div>
+</div>
+
+<!-- ── ERROR ── -->
+<div id="error-msg"></div>
+
+<!-- Three.js primero, luego MindAR por separado -->
+<script src="https://unpkg.com/three@0.154.0/build/three.min.js"></script>
+<script src="https://unpkg.com/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+
+<script>
+async function startAR() {
+  // Verificar que MindAR cargó antes de continuar
+  if (!window.MINDAR || !window.MINDAR.IMAGE) {
+    const msg = document.getElementById('error-msg');
+    msg.style.display = 'flex';
+    msg.innerHTML = `
+      <div>
+        <p style="color:#f55; font-size:16px; font-weight:700">La librería AR no cargó</p>
+        <br>
+        <p>Revisá tu conexión a internet y recargá la página.<br>
+           Si el problema persiste, probá en Chrome o Safari actualizado.</p>
+        <br>
+        <button onclick="location.reload()"
+          style="background:#f90; color:#000; border:none; padding:14px 32px;
+                 border-radius:30px; font-size:16px; font-weight:700; cursor:pointer">
+          Recargar
+        </button>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('ar-container').style.display = 'block';
+
+  const hint = document.getElementById('hint');
+
+  try {
+    // ── 1. Inicializar MindAR con Three.js ──────────────────────────────
+    const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+      container: document.getElementById('ar-container'),
+      imageTargetSrc: './targets.mind',  // archivo compilado de la imagen del cuaderno
+      maxTrack: 1,
+      uiLoading: 'no',
+      uiScanning: 'no',
+      uiError: 'no',
+    });
+
+    const { renderer, scene, camera } = mindarThree;
+
+    // ── 2. Crear el elemento <video> que será la textura ────────────────
+    const videoEl = document.createElement('video');
+    videoEl.src = './video.mp4';
+    videoEl.crossOrigin = 'anonymous';
+    videoEl.loop = true;
+    videoEl.muted = true;           // necesario para autoplay en móvil
+    videoEl.playsInline = true;
+    videoEl.setAttribute('playsinline', '');
+    videoEl.setAttribute('webkit-playsinline', '');
+
+    // ── 3. Crear textura Three.js a partir del video ────────────────────
+    const videoTexture = new THREE.VideoTexture(videoEl);
+    videoTexture.minFilter = THREE.LinearFilter;
+    videoTexture.magFilter = THREE.LinearFilter;
+
+    // ── 4. Crear un plano 3D con la textura del video ───────────────────
+    //    Dimensiones 1 x 0.5625 = proporción 16:9
+    //    Ajusta estos valores si tu video tiene otra proporción
+    const geometry = new THREE.PlaneGeometry(1, 0.5625);
+    const material = new THREE.MeshBasicMaterial({ map: videoTexture });
+    const videoPlane = new THREE.Mesh(geometry, material);
+
+    // ── 5. Adjuntar el plano al anchor (target 0) ───────────────────────
+    //    El anchor es el "gancho" que MindAR fija sobre la imagen detectada.
+    //    Todo lo que se agregue al anchor.group sigue al cuaderno.
+    const anchor = mindarThree.addAnchor(0);
+    anchor.group.add(videoPlane);
+
+    // ── 6. Eventos: video encontrado / perdido ──────────────────────────
+    anchor.onTargetFound = () => {
+      hint.classList.add('hidden');
+      videoEl.play().catch(() => {});
+    };
+
+    anchor.onTargetLost = () => {
+      hint.classList.remove('hidden');
+      videoEl.pause();
+    };
+
+    // ── 7. Arrancar MindAR y el loop de render ──────────────────────────
+    await mindarThree.start();
+
+    renderer.setAnimationLoop(() => {
+      renderer.render(scene, camera);
+    });
+
+  } catch (err) {
+    document.getElementById('ar-container').style.display = 'none';
+    const msg = document.getElementById('error-msg');
+    msg.style.display = 'flex';
+    msg.innerHTML = `
+      <div>
+        <p style="color:#f55; font-size:16px; font-weight:700">No se pudo iniciar la cámara AR</p>
+        <br>
+        <p>Error: ${err.message || err}</p>
+        <br>
+        <p>Asegúrate de:<br>
+          · Abrir desde HTTPS (no desde archivo local)<br>
+          · Permitir el acceso a la cámara<br>
+          · En iOS: Configuración › Safari › Cámara › Permitir
+        </p>
+        <br>
+        <button onclick="location.reload()"
+          style="background:#f90; color:#000; border:none; padding:14px 32px;
+                 border-radius:30px; font-size:16px; font-weight:700; cursor:pointer">
+          Reintentar
+        </button>
+      </div>`;
+  }
+}
+</script>
+
+</body>
+</html>
