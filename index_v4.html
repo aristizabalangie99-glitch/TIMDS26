@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>AR Cuaderno</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; width: 100vw; height: 100vh; font-family: sans-serif; }
+
+    #start-screen {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: #111; color: #fff;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999; gap: 24px; padding: 40px; text-align: center;
+    }
+    #start-screen h2 { font-size: 22px; font-weight: 700; }
+    #start-screen p { font-size: 14px; color: #aaa; line-height: 1.7; }
+    #start-btn {
+      background: #f90; color: #000; border: none;
+      padding: 18px 48px; border-radius: 40px;
+      font-size: 18px; font-weight: 800; cursor: pointer;
+    }
+
+    #container {
+      display: none;
+      position: relative; width: 100vw; height: 100vh;
+    }
+
+    /* cámara real visible */
+    #my-camera {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+
+    /* canvas de MindAR encima */
+    canvas {
+      position: absolute; top: 0; left: 0;
+      width: 100% !important; height: 100% !important;
+    }
+
+    /* video AR encima de todo */
+    #ar-video {
+      position: absolute;
+      display: none;
+      border-radius: 8px;
+      box-shadow: 0 0 30px rgba(255,150,0,0.5);
+    }
+
+    #hint {
+      position: absolute; bottom: 50px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7); color: #fff;
+      padding: 12px 28px; border-radius: 30px;
+      font-size: 14px; border: 1px solid rgba(255,165,0,0.5);
+      white-space: nowrap; z-index: 100;
+    }
+
+    #error-msg {
+      display: none;
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: #111; color: #fff;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 30px; font-size: 15px; line-height: 1.8;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+
+<div id="start-screen">
+  <h2>AR Cuaderno</h2>
+  <p>Toca el botón, acepta el<br>permiso de cámara y apunta<br>a la imagen del cuaderno</p>
+  <button id="start-btn" onclick="startAR()">ACTIVAR CAMARA</button>
+</div>
+
+<div id="container">
+  <video id="my-camera" autoplay playsinline webkit-playsinline muted></video>
+  <video id="ar-video" src="./video.mp4" playsinline webkit-playsinline loop muted></video>
+  <div id="hint">Apunta a la imagen del cuaderno</div>
+</div>
+
+<div id="error-msg"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+
+<script>
+async function startAR() {
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('container').style.display = 'block';
+
+  const cameraEl = document.getElementById('my-camera');
+  const arVideo = document.getElementById('ar-video');
+  const hint = document.getElementById('hint');
+
+  try {
+    // Abrir cámara trasera directamente
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    cameraEl.srcObject = stream;
+    await cameraEl.play();
+
+    // Iniciar MindAR
+    const mindarController = new MINDAR.IMAGE.MindARThree({
+      container: document.getElementById('container'),
+      imageTargetSrc: './targets.mind',
+      maxTrack: 1,
+      uiLoading: 'no',
+      uiScanning: 'no',
+      uiError: 'no',
+    });
+
+    const { renderer, scene, camera } = mindarController;
+
+    await mindarController.start();
+
+    // Cuando detecta la imagen
+    mindarController.addEventTarget(0, {
+      onTargetFound: () => {
+        hint.style.display = 'none';
+        arVideo.style.display = 'block';
+        arVideo.play().catch(() => {});
+        // Posicionar el video sobre la imagen detectada
+        positionVideo(mindarController, arVideo);
+      },
+      onTargetLost: () => {
+        hint.style.display = 'block';
+        arVideo.style.display = 'none';
+        arVideo.pause();
+      },
+    });
+
+    function positionVideo(controller, vid) {
+      function update() {
+        const anchor = controller.anchors[0];
+        if (anchor && anchor.group && arVideo.style.display !== 'none') {
+          const container = document.getElementById('container');
+          const w = container.clientWidth;
+          const h = container.clientHeight;
+          vid.style.width = Math.round(w * 0.7) + 'px';
+          vid.style.height = Math.round(w * 0.7 * 0.5625) + 'px';
+          vid.style.left = Math.round(w * 0.15) + 'px';
+          vid.style.top = Math.round(h * 0.3) + 'px';
+        }
+        requestAnimationFrame(update);
+      }
+      update();
+    }
+
+  } catch (err) {
+    const msg = document.getElementById('error-msg');
+    msg.style.display = 'flex';
+    msg.innerHTML = `
+      <div>
+        <p style="color:#f55;font-size:16px;font-weight:700">No se pudo acceder a la camara</p>
+        <br>
+        <p>Error: ${err.message}</p>
+        <br>
+        <p>Ve a:<br>Configuracion > Safari > Camara > Permitir</p>
+        <br>
+        <p>Luego recarga la pagina</p>
+      </div>`;
+  }
+}
+</script>
+
+</body>
+</html>
